@@ -161,7 +161,7 @@ class ScalingTracker:
                 result = comctl32.SetWindowSubclass(hwnd, proc, 1, 0)
                 if result:
                     print(f"Subscribed to DPICHANGED for window {window}")
-                    window.after(20, lambda: cls._check_dpi_update(window))
+                    window.after(50, lambda: cls._check_dpi_update(window))
                 else:
                     print(f"Failed to subscribe to DPICHANGED for window {window}")
 
@@ -216,8 +216,8 @@ class ScalingTracker:
                         f"No DPI change detected for window {win}, attempt {attempts + 1}"
                     )
                     attempts += 1
-                    if attempts >= 4:
-                        # Drop after 4 attempts
+                    if attempts >= 8:
+                        # Drop after 8 attempts
                         dpi_update_pending.remove(win)
                         if win in dpi_update_attempts:
                             del dpi_update_attempts[win]

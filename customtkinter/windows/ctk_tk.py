@@ -110,7 +110,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         super()._set_scaling(new_widget_scaling, new_window_scaling)
 
     def block_update_dimensions_event(self):
-        self._block_update_dimensions_event = False
+        self._block_update_dimensions_event = True
 
     def unblock_update_dimensions_event(self):
         self._block_update_dimensions_event = False
