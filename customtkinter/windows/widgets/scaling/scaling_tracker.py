@@ -69,29 +69,17 @@ dpi_update_attempts: Dict[Any, int] = {}
 
 def subclass_proc(hwnd, msg, wparam, lparam, uid, refdata):
 
-    WM_SIZE = 0x0005
-    WM_DPICHANGED = 0x02E0
-    WM_DPICHANGED_BEFOREPARENT = 0x02E2
     WM_DPICHANGED_AFTERPARENT = 0x02E3
-    WM_GETDPISCALEDSIZE = 0x02E4
 
     try:
         if msg == WM_DPICHANGED_AFTERPARENT:  # Handle DPI change trigger
-            print(f"DPI change message received: {hex(msg)}")
+            print("DPI change message received")
             hwnd_val = getattr(hwnd, "value", hwnd)
             window = ScalingTracker.hwnd_to_window.get(hwnd_val)
             if window:
                 dpi_update_pending.add(window)
                 dpi_update_attempts[window] = 0
             return 0
-        elif msg == WM_SIZE:
-            print("WM_SIZE received")
-        elif msg == WM_DPICHANGED:
-            print("WM_DPICHANGED received")
-        elif msg == WM_DPICHANGED_BEFOREPARENT:
-            print("WM_DPICHANGED_BEFOREPARENT received")
-        elif msg == WM_GETDPISCALEDSIZE:
-            print("WM_GETDPISCALEDSIZE received")
 
         return comctl32.DefSubclassProc(hwnd, msg, wparam, lparam)
     except Exception as e:
@@ -153,14 +141,12 @@ class ScalingTracker:
         if sys.platform.startswith("win"):
             hwnd = wintypes.HWND(window.winfo_id())
             hwnd_val = getattr(hwnd, "value", hwnd)
-            print(f"Setting up DPI hook for hwnd {hwnd_val}")
             if hwnd_val not in cls.subclass_procs:
                 cls.hwnd_to_window[hwnd_val] = window
                 proc = SUBCLASSPROC(subclass_proc)
                 cls.subclass_procs[hwnd_val] = proc
                 result = comctl32.SetWindowSubclass(hwnd, proc, 1, 0)
                 if result:
-                    print(f"Subscribed to DPICHANGED for window {window}")
                     window.after(50, lambda: cls._check_dpi_update(window))
                 else:
                     print(f"Failed to subscribe to DPICHANGED for window {window}")
@@ -212,12 +198,10 @@ class ScalingTracker:
                     if win in dpi_update_attempts:
                         del dpi_update_attempts[win]
                 else:
-                    print(
-                        f"No DPI change detected for window {win}, attempt {attempts + 1}"
-                    )
                     attempts += 1
                     if attempts >= 8:
                         # Drop after 8 attempts
+                        print("Dropping DPI update after multiple failed attempts")
                         dpi_update_pending.remove(win)
                         if win in dpi_update_attempts:
                             del dpi_update_attempts[win]
