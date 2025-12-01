@@ -1,20 +1,120 @@
+import enum
 import tkinter
 import sys
-from typing import Callable
+from typing import Callable, Dict, List, Any
+import ctypes
+from ctypes import wintypes, WINFUNCTYPE
+
+
+comctl32 = ctypes.WinDLL("comctl32.dll")
+comctl32.DefSubclassProc.argtypes = [
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+]
+comctl32.DefSubclassProc.restype = wintypes.LPARAM  # LRESULT = LONG_PTR
+comctl32.SetWindowSubclass.argtypes = [
+    wintypes.HWND,
+    ctypes.c_void_p,
+    wintypes.UINT,
+    wintypes.LPARAM,
+]  # SUBCLASSPROC is pointer
+comctl32.SetWindowSubclass.restype = wintypes.BOOL
+comctl32.RemoveWindowSubclass.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.UINT]
+comctl32.RemoveWindowSubclass.restype = wintypes.BOOL
+SUBCLASSPROC = WINFUNCTYPE(
+    wintypes.LPARAM,
+    wintypes.HWND,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+    wintypes.UINT,
+    wintypes.LPARAM,
+)
+
+
+class DPIAware(enum.Enum):
+    SYSTEM_AWARE = ctypes.wintypes.HANDLE(-2)
+    PER_MONITOR_AWARE = ctypes.wintypes.HANDLE(-3)
+    PER_MONITOR_AWARE_V2 = ctypes.wintypes.HANDLE(-4)
+
+
+class DPIUnaware(enum.Enum):
+    UNAWARE = ctypes.wintypes.HANDLE(-1)
+    UNAWARE_GDISCALED = ctypes.wintypes.HANDLE(-5)
+
+
+class ProcessDPIAwareness(enum.Enum):
+    UNAWARE = 0
+    SYSTEM_AWARE = 1
+    PER_MONITOR_AWARE = 2
+
+
+class DeviceCapsIndex(enum.Enum):
+    HORZSIZE = 4
+    VERTSIZE = 6
+    HORZRES = 8
+    VERTRES = 10
+    ASPECTX = 40
+    ASPECTY = 42
+    ASPECTXY = 44
+    LOGPIXELSX = 88
+    LOGPIXELSY = 90
+
+
+dpi_update_pending = set()
+dpi_update_attempts: Dict[Any, int] = {}
+
+
+def subclass_proc(hwnd, msg, wparam, lparam, uid, refdata):
+
+    WM_SIZE = 0x0005
+    WM_DPICHANGED = 0x02E0
+    WM_DPICHANGED_BEFOREPARENT = 0x02E2
+    WM_DPICHANGED_AFTERPARENT = 0x02E3
+    WM_GETDPISCALEDSIZE = 0x02E4
+
+    try:
+        if msg == WM_DPICHANGED_AFTERPARENT:  # Handle DPI change trigger
+            print(f"DPI change message received: {hex(msg)}")
+            hwnd_val = getattr(hwnd, "value", hwnd)
+            window = ScalingTracker.hwnd_to_window.get(hwnd_val)
+            if window:
+                dpi_update_pending.add(window)
+                dpi_update_attempts[window] = 0
+            return 0
+        elif msg == WM_SIZE:
+            print("WM_SIZE received")
+        elif msg == WM_DPICHANGED:
+            print("WM_DPICHANGED received")
+        elif msg == WM_DPICHANGED_BEFOREPARENT:
+            print("WM_DPICHANGED_BEFOREPARENT received")
+        elif msg == WM_GETDPISCALEDSIZE:
+            print("WM_GETDPISCALEDSIZE received")
+
+        return comctl32.DefSubclassProc(hwnd, msg, wparam, lparam)
+    except Exception as e:
+        print(f"Exception in subclass_proc: {e}")
+        return comctl32.DefSubclassProc(hwnd, msg, wparam, lparam)
 
 
 class ScalingTracker:
     deactivate_automatic_dpi_awareness = False
 
-    window_widgets_dict = {}  # contains window objects as keys with list of widget callbacks as elements
-    window_dpi_scaling_dict = {}  # contains window objects as keys and corresponding scaling factors
+    window_widgets_dict: Dict[object, List[Callable]] = (
+        {}
+    )  # contains window objects as keys with list of widget callbacks as elements
+    window_dpi_scaling_dict: Dict[object, float] = (
+        {}
+    )  # contains window objects as keys and corresponding scaling factors
 
-    widget_scaling = 1  # user values which multiply to detected window scaling factor
-    window_scaling = 1
+    widget_scaling = 1.0  # user values which multiply to detected window scaling factor
+    window_scaling = 1.0
 
-    update_loop_running = False
-    update_loop_interval = 100  # ms
-    loop_pause_after_new_scaling = 1500  # ms
+    hwnd_to_window: Dict[int, object] = {}
+    subclass_procs: Dict[int, Any] = {}
+    dpi_awareness_activated = False
 
     @classmethod
     def get_widget_scaling(cls, widget) -> float:
@@ -40,32 +140,91 @@ class ScalingTracker:
     def get_window_root_of_widget(cls, widget):
         current_widget = widget
 
-        while isinstance(current_widget, tkinter.Tk) is False and\
-                isinstance(current_widget, tkinter.Toplevel) is False:
+        while (
+            isinstance(current_widget, tkinter.Tk) is False
+            and isinstance(current_widget, tkinter.Toplevel) is False
+        ):
             current_widget = current_widget.master
 
         return current_widget
+
+    @classmethod
+    def setup_dpi_hook(cls, window):
+        if sys.platform.startswith("win"):
+            hwnd = wintypes.HWND(window.winfo_id())
+            hwnd_val = getattr(hwnd, "value", hwnd)
+            print(f"Setting up DPI hook for hwnd {hwnd_val}")
+            if hwnd_val not in cls.subclass_procs:
+                cls.hwnd_to_window[hwnd_val] = window
+                proc = SUBCLASSPROC(subclass_proc)
+                cls.subclass_procs[hwnd_val] = proc
+                result = comctl32.SetWindowSubclass(hwnd, proc, 1, 0)
+                if result:
+                    print(f"Subscribed to DPICHANGED for window {window}")
+                    window.after(20, lambda: cls._check_dpi_update(window))
+                else:
+                    print(f"Failed to subscribe to DPICHANGED for window {window}")
 
     @classmethod
     def update_scaling_callbacks_all(cls):
         for window, callback_list in cls.window_widgets_dict.items():
             for set_scaling_callback in callback_list:
                 if not cls.deactivate_automatic_dpi_awareness:
-                    set_scaling_callback(cls.window_dpi_scaling_dict[window] * cls.widget_scaling,
-                                         cls.window_dpi_scaling_dict[window] * cls.window_scaling)
+                    set_scaling_callback(
+                        cls.window_dpi_scaling_dict[window] * cls.widget_scaling,
+                        cls.window_dpi_scaling_dict[window] * cls.window_scaling,
+                    )
                 else:
-                    set_scaling_callback(cls.widget_scaling,
-                                         cls.window_scaling)
+                    set_scaling_callback(cls.widget_scaling, cls.window_scaling)
 
     @classmethod
     def update_scaling_callbacks_for_window(cls, window):
         for set_scaling_callback in cls.window_widgets_dict[window]:
             if not cls.deactivate_automatic_dpi_awareness:
-                set_scaling_callback(cls.window_dpi_scaling_dict[window] * cls.widget_scaling,
-                                     cls.window_dpi_scaling_dict[window] * cls.window_scaling)
+                set_scaling_callback(
+                    cls.window_dpi_scaling_dict[window] * cls.widget_scaling,
+                    cls.window_dpi_scaling_dict[window] * cls.window_scaling,
+                )
             else:
-                set_scaling_callback(cls.widget_scaling,
-                                     cls.window_scaling)
+                set_scaling_callback(cls.widget_scaling, cls.window_scaling)
+
+    @classmethod
+    def _check_dpi_update(cls, window):
+        for win in list(dpi_update_pending):
+            if win == window:  # Only check for this window's timer
+                attempts = dpi_update_attempts.get(win, 0)
+                current_dpi_scaling_value = cls.get_window_dpi_scaling(win)
+                stored_value = cls.window_dpi_scaling_dict.get(
+                    win, current_dpi_scaling_value
+                )
+                if current_dpi_scaling_value != stored_value:
+                    cls.window_dpi_scaling_dict[win] = current_dpi_scaling_value
+                    # Update scaling
+                    if sys.platform.startswith("win"):
+                        win.attributes("-alpha", 0.15)
+                    win.block_update_dimensions_event()
+                    cls.update_scaling_callbacks_for_window(win)
+                    win.unblock_update_dimensions_event()
+                    if sys.platform.startswith("win"):
+                        win.attributes("-alpha", 1)
+                    # Change detected, remove from pending
+                    dpi_update_pending.remove(win)
+                    if win in dpi_update_attempts:
+                        del dpi_update_attempts[win]
+                else:
+                    print(
+                        f"No DPI change detected for window {win}, attempt {attempts + 1}"
+                    )
+                    attempts += 1
+                    if attempts >= 4:
+                        # Drop after 4 attempts
+                        dpi_update_pending.remove(win)
+                        if win in dpi_update_attempts:
+                            del dpi_update_attempts[win]
+                    else:
+                        dpi_update_attempts[win] = attempts
+        # Schedule next check
+        window.after(20, lambda: cls._check_dpi_update(window))
 
     @classmethod
     def add_widget(cls, widget_callback: Callable, widget):
@@ -73,30 +232,39 @@ class ScalingTracker:
 
         if window_root not in cls.window_widgets_dict:
             cls.window_widgets_dict[window_root] = [widget_callback]
+            cls.setup_dpi_hook(window_root)
         else:
             cls.window_widgets_dict[window_root].append(widget_callback)
 
         if window_root not in cls.window_dpi_scaling_dict:
-            cls.window_dpi_scaling_dict[window_root] = cls.get_window_dpi_scaling(window_root)
-
-        if not cls.update_loop_running:
-            window_root.after(100, cls.check_dpi_scaling)
-            cls.update_loop_running = True
+            cls.window_dpi_scaling_dict[window_root] = cls.get_window_dpi_scaling(
+                window_root
+            )
 
     @classmethod
     def remove_widget(cls, widget_callback, widget):
         window_root = cls.get_window_root_of_widget(widget)
         try:
             cls.window_widgets_dict[window_root].remove(widget_callback)
-        except:
+        except Exception:
             pass
 
     @classmethod
     def remove_window(cls, window_callback, window):
         try:
             del cls.window_widgets_dict[window]
-        except:
+        except Exception:
             pass
+        if sys.platform.startswith("win"):
+            try:
+                hwnd = wintypes.HWND(window.winfo_id())
+                hwnd_val = getattr(hwnd, "value", hwnd)
+                if hwnd_val in cls.subclass_procs:
+                    comctl32.RemoveWindowSubclass(hwnd, cls.subclass_procs[hwnd_val], 1)
+                    del cls.subclass_procs[hwnd_val]
+                    del cls.hwnd_to_window[hwnd_val]
+            except Exception:
+                pass
 
     @classmethod
     def add_window(cls, window_callback, window):
@@ -107,45 +275,52 @@ class ScalingTracker:
 
         if window not in cls.window_dpi_scaling_dict:
             cls.window_dpi_scaling_dict[window] = cls.get_window_dpi_scaling(window)
+            cls.setup_dpi_hook(window)
 
     @classmethod
     def activate_high_dpi_awareness(cls):
-        """ make process DPI aware, customtkinter elements will get scaled automatically,
-            only gets activated when CTk object is created """
+        """make process DPI aware, customtkinter elements will get scaled automatically,
+        only gets activated when CTk object is created"""
 
-        if not cls.deactivate_automatic_dpi_awareness:
-            if sys.platform == "darwin":
-                pass  # high DPI scaling works automatically on macOS
+        if not cls.dpi_awareness_activated:
+            if not cls.deactivate_automatic_dpi_awareness:
+                if sys.platform == "darwin":
+                    pass  # high DPI scaling works automatically on macOS
 
-            elif sys.platform.startswith("win"):
-                import ctypes
+                elif sys.platform.startswith("win"):
+                    import ctypes
 
-                # Values for SetProcessDpiAwareness and SetProcessDpiAwarenessContext:
-                # internal enum PROCESS_DPI_AWARENESS
-                # {
-                #     Process_DPI_Unaware = 0,
-                #     Process_System_DPI_Aware = 1,
-                #     Process_Per_Monitor_DPI_Aware = 2
-                # }
-                #
-                # internal enum DPI_AWARENESS_CONTEXT
-                # {
-                #     DPI_AWARENESS_CONTEXT_UNAWARE = 16,
-                #     DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = 17,
-                #     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = 18,
-                #     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = 34
-                # }
+                    # Values for SetProcessDpiAwareness and SetProcessDpiAwarenessContext:
+                    # internal enum PROCESS_DPI_AWARENESS
+                    # {
+                    #     Process_DPI_Unaware = 0,
+                    #     Process_System_DPI_Aware = 1,
+                    #     Process_Per_Monitor_DPI_Aware = 2
+                    # }
+                    #
+                    # internal enum DPI_AWARENESS_CONTEXT
+                    # {
+                    #     DPI_AWARENESS_CONTEXT_UNAWARE = 16,
+                    #     DPI_AWARENESS_CONTEXT_SYSTEM_AWARE = 17,
+                    #     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = 18,
+                    #     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = 34
+                    # }
 
-                # ctypes.windll.user32.SetProcessDpiAwarenessContext(34)  # Non client area scaling at runtime (titlebar)
-                # does not work with resizable(False, False), window starts growing on monitor with different scaling (weird tkinter bug...)
-                # ctypes.windll.user32.EnableNonClientDpiScaling(hwnd) does not work for some reason (tested on Windows 11)
+                    ctypes.windll.user32.SetProcessDpiAwarenessContext(
+                        34
+                    )  # Non client area scaling at runtime (titlebar)
+                    # does not work with resizable(False, False), window starts growing on monitor with different scaling (weird tkinter bug...)
+                    # Get the current foreground window handle for DPI scaling
 
-                # It's too bad, that these Windows API methods don't work properly with tkinter. But I tested days with multiple monitor setups,
-                # and I don't think there is anything left to do. So this is the best option at the moment:
+                    # It's too bad, that these Windows API methods don't work properly with tkinter. But I tested days with multiple monitor setups,
+                    # and I don't think there is anything left to do. So this is the best option at the moment:
 
-                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Titlebar does not scale at runtime
-            else:
-                pass  # DPI awareness on Linux not implemented
+                    ctypes.windll.shcore.SetProcessDpiAwareness(
+                        2
+                    )  # Titlebar does not scale at runtime
+                else:
+                    pass  # DPI awareness on Linux not implemented
+            cls.dpi_awareness_activated = True
 
     @classmethod
     def get_window_dpi_scaling(cls, window) -> float:
@@ -157,50 +332,20 @@ class ScalingTracker:
                 from ctypes import windll, pointer, wintypes
 
                 DPI100pc = 96  # DPI 96 is 100% scaling
-                DPI_type = 0  # MDT_EFFECTIVE_DPI = 0, MDT_ANGULAR_DPI = 1, MDT_RAW_DPI = 2
+                DPI_type = (
+                    0  # MDT_EFFECTIVE_DPI = 0, MDT_ANGULAR_DPI = 1, MDT_RAW_DPI = 2
+                )
                 window_hwnd = wintypes.HWND(window.winfo_id())
-                monitor_handle = windll.user32.MonitorFromWindow(window_hwnd, wintypes.DWORD(2))  # MONITOR_DEFAULTTONEAREST = 2
+                monitor_handle = windll.user32.MonitorFromWindow(
+                    window_hwnd, wintypes.DWORD(2)
+                )  # MONITOR_DEFAULTTONEAREST = 2
                 x_dpi, y_dpi = wintypes.UINT(), wintypes.UINT()
-                windll.shcore.GetDpiForMonitor(monitor_handle, DPI_type, pointer(x_dpi), pointer(y_dpi))
+                windll.shcore.GetDpiForMonitor(
+                    monitor_handle, DPI_type, pointer(x_dpi), pointer(y_dpi)
+                )
                 return (x_dpi.value + y_dpi.value) / (2 * DPI100pc)
 
             else:
                 return 1  # DPI awareness on Linux not implemented
         else:
             return 1
-
-    @classmethod
-    def check_dpi_scaling(cls):
-        new_scaling_detected = False
-
-        # check for every window if scaling value changed
-        for window in cls.window_widgets_dict:
-            if window.winfo_exists() and not window.state() == "iconic":
-                current_dpi_scaling_value = cls.get_window_dpi_scaling(window)
-                if current_dpi_scaling_value != cls.window_dpi_scaling_dict[window]:
-                    cls.window_dpi_scaling_dict[window] = current_dpi_scaling_value
-
-                    if sys.platform.startswith("win"):
-                        window.attributes("-alpha", 0.15)
-
-                    window.block_update_dimensions_event()
-                    cls.update_scaling_callbacks_for_window(window)
-                    window.unblock_update_dimensions_event()
-
-                    if sys.platform.startswith("win"):
-                        window.attributes("-alpha", 1)
-
-                    new_scaling_detected = True
-
-        # find an existing tkinter object for the next call of .after()
-        for app in cls.window_widgets_dict.keys():
-            try:
-                if new_scaling_detected:
-                    app.after(cls.loop_pause_after_new_scaling, cls.check_dpi_scaling)
-                else:
-                    app.after(cls.update_loop_interval, cls.check_dpi_scaling)
-                return
-            except Exception:
-                continue
-
-        cls.update_loop_running = False
