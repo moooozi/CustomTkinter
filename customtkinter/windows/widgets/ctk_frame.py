@@ -14,26 +14,62 @@ class CTkFrame(CTkBaseClass):
     For detailed information check out the documentation.
     """
 
-    def __init__(self,
-                 master: Any,
-                 width: int = 200,
-                 height: int = 200,
-                 corner_radius: Optional[Union[int, str]] = None,
-                 border_width: Optional[Union[int, str]] = None,
+    def _needs_canvas(self) -> bool:
+        """Check if canvas is needed for custom drawing."""
+        return (
+            self._corner_radius > 0
+            or self._border_width > 0
+            or self._fg_color != "transparent"
+        )
 
-                 bg_color: Union[str, Tuple[str, str]] = "transparent",
-                 fg_color: Optional[Union[str, Tuple[str, str]]] = None,
-                 border_color: Optional[Union[str, Tuple[str, str]]] = None,
+    def _setup_canvas(self):
+        """Create and setup the canvas for drawing."""
+        self._canvas = CTkCanvas(
+            master=self,
+            highlightthickness=0,
+            width=self._apply_widget_scaling(self._current_width),
+            height=self._apply_widget_scaling(self._current_height),
+        )
+        self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        self._canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
+        self._draw_engine = DrawEngine(self._canvas)
+        self._draw(no_color_updates=True)
 
-                 background_corner_colors: Union[Tuple[Union[str, Tuple[str, str]]], None] = None,
-                 overwrite_preferred_drawing_method: Union[str, None] = None,
-                 **kwargs):
+    def _teardown_canvas(self):
+        """Destroy the canvas if it exists."""
+        if self._canvas is not None:
+            self._canvas.destroy()
+            self._canvas = None
+            self._draw_engine = None
+
+    def __init__(
+        self,
+        master: Any,
+        width: int = 200,
+        height: int = 200,
+        corner_radius: Optional[Union[int, str]] = None,
+        border_width: Optional[Union[int, str]] = None,
+        bg_color: Union[str, Tuple[str, str]] = "transparent",
+        fg_color: Optional[Union[str, Tuple[str, str]]] = None,
+        border_color: Optional[Union[str, Tuple[str, str]]] = None,
+        background_corner_colors: Union[
+            Tuple[Union[str, Tuple[str, str]]], None
+        ] = None,
+        overwrite_preferred_drawing_method: Union[str, None] = None,
+        **kwargs
+    ):
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
-        super().__init__(master=master, bg_color=bg_color, width=width, height=height, **kwargs)
+        super().__init__(
+            master=master, bg_color=bg_color, width=width, height=height, **kwargs
+        )
 
         # color
-        self._border_color = ThemeManager.theme["CTkFrame"]["border_color"] if border_color is None else self._check_color_type(border_color)
+        self._border_color = (
+            ThemeManager.theme["CTkFrame"]["border_color"]
+            if border_color is None
+            else self._check_color_type(border_color)
+        )
 
         # determine fg_color of frame
         if fg_color is None:
@@ -47,85 +83,127 @@ class CTkFrame(CTkBaseClass):
         else:
             self._fg_color = self._check_color_type(fg_color, transparency=True)
 
-        self._background_corner_colors = background_corner_colors  # rendering options for DrawEngine
+        self._background_corner_colors = (
+            background_corner_colors  # rendering options for DrawEngine
+        )
 
         # shape
-        self._corner_radius = ThemeManager.theme["CTkFrame"]["corner_radius"] if corner_radius is None else corner_radius
-        self._border_width = ThemeManager.theme["CTkFrame"]["border_width"] if border_width is None else border_width
+        self._corner_radius = (
+            ThemeManager.theme["CTkFrame"]["corner_radius"]
+            if corner_radius is None
+            else corner_radius
+        )
+        self._border_width = (
+            ThemeManager.theme["CTkFrame"]["border_width"]
+            if border_width is None
+            else border_width
+        )
 
-        self._canvas = CTkCanvas(master=self,
-                                 highlightthickness=0,
-                                 width=self._apply_widget_scaling(self._current_width),
-                                 height=self._apply_widget_scaling(self._current_height))
-        self._canvas.place(x=0, y=0, relwidth=1, relheight=1)
-        self._canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
-        self._draw_engine = DrawEngine(self._canvas)
         self._overwrite_preferred_drawing_method = overwrite_preferred_drawing_method
 
-        self._draw(no_color_updates=True)
+        # conditionally create canvas only if custom drawing is needed
+        if self._needs_canvas():
+            self._setup_canvas()
+        else:
+            self._canvas = None
+            self._draw_engine = None
 
-    def winfo_children(self) -> List[any]:
+    def winfo_children(self) -> List[Any]:
         """
         winfo_children of CTkFrame without self.canvas widget,
         because it's not a child but part of the CTkFrame itself
         """
 
         child_widgets = super().winfo_children()
-        try:
-            child_widgets.remove(self._canvas)
-            return child_widgets
-        except ValueError:
+        if self._canvas is not None:
+            try:
+                child_widgets.remove(self._canvas)
+                return child_widgets
+            except ValueError:
+                return child_widgets
+        else:
             return child_widgets
 
     def _set_scaling(self, *args, **kwargs):
         super()._set_scaling(*args, **kwargs)
 
-        self._canvas.configure(width=self._apply_widget_scaling(self._desired_width),
-                               height=self._apply_widget_scaling(self._desired_height))
-        self._draw()
+        if self._canvas is not None:
+            self._canvas.configure(
+                width=self._apply_widget_scaling(self._desired_width),
+                height=self._apply_widget_scaling(self._desired_height),
+            )
+            self._draw()
 
     def _set_dimensions(self, width=None, height=None):
         super()._set_dimensions(width, height)
 
-        self._canvas.configure(width=self._apply_widget_scaling(self._desired_width),
-                               height=self._apply_widget_scaling(self._desired_height))
-        self._draw()
+        if self._canvas is not None:
+            self._canvas.configure(
+                width=self._apply_widget_scaling(self._desired_width),
+                height=self._apply_widget_scaling(self._desired_height),
+            )
+            self._draw()
 
     def _draw(self, no_color_updates=False):
         super()._draw(no_color_updates)
+
+        if self._canvas is None:
+            return
 
         if not self._canvas.winfo_exists():
             return
 
         if self._background_corner_colors is not None:
-            self._draw_engine.draw_background_corners(self._apply_widget_scaling(self._current_width),
-                                                      self._apply_widget_scaling(self._current_height))
-            self._canvas.itemconfig("background_corner_top_left", fill=self._apply_appearance_mode(self._background_corner_colors[0]))
-            self._canvas.itemconfig("background_corner_top_right", fill=self._apply_appearance_mode(self._background_corner_colors[1]))
-            self._canvas.itemconfig("background_corner_bottom_right", fill=self._apply_appearance_mode(self._background_corner_colors[2]))
-            self._canvas.itemconfig("background_corner_bottom_left", fill=self._apply_appearance_mode(self._background_corner_colors[3]))
+            self._draw_engine.draw_background_corners(
+                self._apply_widget_scaling(self._current_width),
+                self._apply_widget_scaling(self._current_height),
+            )
+            self._canvas.itemconfig(
+                "background_corner_top_left",
+                fill=self._apply_appearance_mode(self._background_corner_colors[0]),
+            )
+            self._canvas.itemconfig(
+                "background_corner_top_right",
+                fill=self._apply_appearance_mode(self._background_corner_colors[1]),
+            )
+            self._canvas.itemconfig(
+                "background_corner_bottom_right",
+                fill=self._apply_appearance_mode(self._background_corner_colors[2]),
+            )
+            self._canvas.itemconfig(
+                "background_corner_bottom_left",
+                fill=self._apply_appearance_mode(self._background_corner_colors[3]),
+            )
         else:
             self._canvas.delete("background_parts")
 
-        requires_recoloring = self._draw_engine.draw_rounded_rect_with_border(self._apply_widget_scaling(self._current_width),
-                                                                              self._apply_widget_scaling(self._current_height),
-                                                                              self._apply_widget_scaling(self._corner_radius),
-                                                                              self._apply_widget_scaling(self._border_width),
-                                                                              overwrite_preferred_drawing_method=self._overwrite_preferred_drawing_method)
+        requires_recoloring = self._draw_engine.draw_rounded_rect_with_border(
+            self._apply_widget_scaling(self._current_width),
+            self._apply_widget_scaling(self._current_height),
+            self._apply_widget_scaling(self._corner_radius),
+            self._apply_widget_scaling(self._border_width),
+            overwrite_preferred_drawing_method=self._overwrite_preferred_drawing_method,
+        )
 
         if no_color_updates is False or requires_recoloring:
             if self._fg_color == "transparent":
-                self._canvas.itemconfig("inner_parts",
-                                        fill=self._apply_appearance_mode(self._bg_color),
-                                        outline=self._apply_appearance_mode(self._bg_color))
+                self._canvas.itemconfig(
+                    "inner_parts",
+                    fill=self._apply_appearance_mode(self._bg_color),
+                    outline=self._apply_appearance_mode(self._bg_color),
+                )
             else:
-                self._canvas.itemconfig("inner_parts",
-                                        fill=self._apply_appearance_mode(self._fg_color),
-                                        outline=self._apply_appearance_mode(self._fg_color))
+                self._canvas.itemconfig(
+                    "inner_parts",
+                    fill=self._apply_appearance_mode(self._fg_color),
+                    outline=self._apply_appearance_mode(self._fg_color),
+                )
 
-            self._canvas.itemconfig("border_parts",
-                                    fill=self._apply_appearance_mode(self._border_color),
-                                    outline=self._apply_appearance_mode(self._border_color))
+            self._canvas.itemconfig(
+                "border_parts",
+                fill=self._apply_appearance_mode(self._border_color),
+                outline=self._apply_appearance_mode(self._border_color),
+            )
             self._canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
 
         # self._canvas.tag_lower("inner_parts")  # maybe unnecessary, I don't know ???
@@ -133,7 +211,9 @@ class CTkFrame(CTkBaseClass):
 
     def configure(self, require_redraw=False, **kwargs):
         if "fg_color" in kwargs:
-            self._fg_color = self._check_color_type(kwargs.pop("fg_color"), transparency=True)
+            self._fg_color = self._check_color_type(
+                kwargs.pop("fg_color"), transparency=True
+            )
             require_redraw = True
 
             # check if CTk widgets are children of the frame and change their bg_color to new frame fg_color
@@ -164,9 +244,23 @@ class CTkFrame(CTkBaseClass):
             self._border_width = kwargs.pop("border_width")
             require_redraw = True
 
+        if "overwrite_preferred_drawing_method" in kwargs:
+            self._overwrite_preferred_drawing_method = kwargs.pop(
+                "overwrite_preferred_drawing_method"
+            )
+            require_redraw = True
+
+        # check if canvas needs to be created or destroyed based on current settings
+        if self._needs_canvas() and self._canvas is None:
+            self._setup_canvas()
+            require_redraw = True
+        elif not self._needs_canvas() and self._canvas is not None:
+            self._teardown_canvas()
+            require_redraw = False  # no canvas to draw
+
         super().configure(require_redraw=require_redraw, **kwargs)
 
-    def cget(self, attribute_name: str) -> any:
+    def cget(self, attribute_name: str) -> Any:
         if attribute_name == "corner_radius":
             return self._corner_radius
         elif attribute_name == "border_width":
@@ -179,18 +273,29 @@ class CTkFrame(CTkBaseClass):
         elif attribute_name == "background_corner_colors":
             return self._background_corner_colors
 
+        elif attribute_name == "overwrite_preferred_drawing_method":
+            return self._overwrite_preferred_drawing_method
+
         else:
             return super().cget(attribute_name)
 
     def bind(self, sequence=None, command=None, add=True):
-        """ called on the tkinter.Canvas """
+        """called on the tkinter.Canvas"""
+        if self._canvas is None:
+            raise AttributeError("Binding not supported when canvas is not created")
         if not (add == "+" or add is True):
-            raise ValueError("'add' argument can only be '+' or True to preserve internal callbacks")
+            raise ValueError(
+                "'add' argument can only be '+' or True to preserve internal callbacks"
+            )
         self._canvas.bind(sequence, command, add=True)
 
     def unbind(self, sequence=None, funcid=None):
-        """ called on the tkinter.Canvas """
+        """called on the tkinter.Canvas"""
+        if self._canvas is None:
+            raise AttributeError("Unbinding not supported when canvas is not created")
         if funcid is not None:
-            raise ValueError("'funcid' argument can only be None, because there is a bug in" +
-                             " tkinter and its not clear whether the internal callbacks will be unbinded or not")
+            raise ValueError(
+                "'funcid' argument can only be None, because there is a bug in"
+                + " tkinter and its not clear whether the internal callbacks will be unbinded or not"
+            )
         self._canvas.unbind(sequence, None)
