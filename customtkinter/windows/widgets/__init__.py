@@ -3,7 +3,9 @@ from .ctk_checkbox import CTkCheckBox
 from .ctk_combobox import CTkComboBox
 from .ctk_entry import CTkEntry
 from .ctk_frame import CTkFrame
+from .ctk_container import CTkContainer
 from .ctk_label import CTkLabel
+from .ctk_simple_label import CTkSimpleLabel
 from .ctk_optionmenu import CTkOptionMenu
 from .ctk_progressbar import CTkProgressBar
 from .ctk_radiobutton import CTkRadioButton
