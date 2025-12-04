@@ -324,3 +324,8 @@ class CTkBaseClass(tkinter.Frame, CTkAppearanceModeBaseClass, CTkScalingBaseClas
         """ Unmap this widget. """
         self._last_geometry_manager_call = None
         return super().grid_forget()
+
+    def grid_remove(self):
+        """Unmap this widget but remember the grid options."""
+        self._last_geometry_manager_call = None
+        return super().grid_remove()
