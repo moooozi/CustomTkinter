@@ -81,6 +81,9 @@ class CTkSimpleLabel(CTkBaseClass):
         self._label.pack(fill="both", expand=True)
 
         self._label.bind("<Configure>", self._update_wraplength)
+        self._master_configure_id = self.master.bind(
+            "<Configure>", self._update_wraplength, add="+"
+        )
         self._update_wraplength()
 
     def _set_scaling(self, *args, **kwargs):
@@ -104,7 +107,7 @@ class CTkSimpleLabel(CTkBaseClass):
 
     def _update_wraplength(self, event=None):
         if self._wraplength == "auto":
-            self._label.configure(wraplength=self._label.winfo_width())
+            self._label.configure(wraplength=self.master.winfo_width())
         else:
             self._label.configure(
                 wraplength=self._apply_widget_scaling(self._wraplength)
@@ -113,6 +116,10 @@ class CTkSimpleLabel(CTkBaseClass):
     def destroy(self):
         if isinstance(self._font, CTkFont):
             self._font.remove_size_configure_callback(self._update_font)
+        try:
+            self.master.unbind("<Configure>", self._master_configure_id)
+        except Exception:
+            pass
         super().destroy()
 
     def configure(self, require_redraw=False, **kwargs):
