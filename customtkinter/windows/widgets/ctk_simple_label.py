@@ -35,7 +35,7 @@ class CTkSimpleLabel(CTkBaseClass):
         text: str = "CTkSimpleLabel",
         font: Optional[Union[tuple, CTkFont]] = None,
         anchor: str = "center",
-        wraplength: Union[int, str] = "auto",
+        wraplength: Union[int, str] = "master",
         **kwargs
     ):
 
@@ -106,8 +106,14 @@ class CTkSimpleLabel(CTkBaseClass):
         self._label.configure(font=self._apply_font_scaling(self._font))
 
     def _update_wraplength(self, event=None):
-        if self._wraplength == "auto":
-            self._label.configure(wraplength=self.master.winfo_width())
+        if isinstance(self._wraplength, str):
+            if self._wraplength == "self":
+                width = self.winfo_width()
+            elif self._wraplength == "master":
+                width = self.master.winfo_width()
+            else:
+                raise ValueError(f"Invalid wraplength: {self._wraplength}")
+            self._label.configure(wraplength=width)
         else:
             self._label.configure(
                 wraplength=self._apply_widget_scaling(self._wraplength)
@@ -150,8 +156,10 @@ class CTkSimpleLabel(CTkBaseClass):
 
         if "wraplength" in kwargs:
             wl = kwargs.pop("wraplength")
-            if wl != "auto" and not isinstance(wl, int):
-                raise ValueError("wraplength must be 'auto' or an integer")
+            if isinstance(wl, str) and wl not in ("self", "master"):
+                raise ValueError("wraplength must be 'self', 'master', or an integer")
+            elif not isinstance(wl, (str, int)):
+                raise ValueError("wraplength must be 'self', 'master', or an integer")
             self._wraplength = wl
             self._update_wraplength()
 
