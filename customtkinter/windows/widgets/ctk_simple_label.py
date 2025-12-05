@@ -36,7 +36,7 @@ class CTkSimpleLabel(CTkBaseClass):
         font: Optional[Union[tuple, CTkFont]] = None,
         anchor: str = "center",
         wraplength: Union[int, str] = "master",
-        **kwargs
+        **kwargs,
     ):
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
@@ -81,8 +81,8 @@ class CTkSimpleLabel(CTkBaseClass):
         self._label.pack(fill="both", expand=True)
 
         self._label.bind("<Configure>", self._update_wraplength)
-        self._master_configure_id = self.master.bind(
-            "<Configure>", self._update_wraplength, add="+"
+        self._master_configure_id = tkinter.Frame.bind(
+            self.master, "<Configure>", self._update_wraplength, add="+"
         )
         self._update_wraplength()
 
@@ -123,7 +123,7 @@ class CTkSimpleLabel(CTkBaseClass):
         if isinstance(self._font, CTkFont):
             self._font.remove_size_configure_callback(self._update_font)
         try:
-            self.master.unbind("<Configure>", self._master_configure_id)
+            tkinter.Frame.unbind(self.master, "<Configure>", self._master_configure_id)
         except Exception:
             pass
         super().destroy()
