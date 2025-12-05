@@ -35,7 +35,7 @@ class CTkSimpleLabel(CTkBaseClass):
         text: str = "CTkSimpleLabel",
         font: Optional[Union[tuple, CTkFont]] = None,
         anchor: str = "center",
-        wraplength: int = 0,
+        wraplength: Union[int, str] = "auto",
         **kwargs
     ):
 
@@ -69,7 +69,6 @@ class CTkSimpleLabel(CTkBaseClass):
             anchor=self._anchor,
             text=self._text,
             font=self._apply_font_scaling(self._font),
-            wraplength=self._apply_widget_scaling(self._wraplength),
             fg=self._apply_appearance_mode(self._text_color),
             bg=self._apply_appearance_mode(self._bg_color),
         )
@@ -81,10 +80,13 @@ class CTkSimpleLabel(CTkBaseClass):
 
         self._label.pack(fill="both", expand=True)
 
+        self._label.bind("<Configure>", self._update_wraplength)
+        self._update_wraplength()
+
     def _set_scaling(self, *args, **kwargs):
         super()._set_scaling(*args, **kwargs)
         self._label.configure(font=self._apply_font_scaling(self._font))
-        self._label.configure(wraplength=self._apply_widget_scaling(self._wraplength))
+        self._update_wraplength()
 
     def _set_appearance_mode(self, mode_string):
         super()._set_appearance_mode(mode_string)
@@ -99,6 +101,14 @@ class CTkSimpleLabel(CTkBaseClass):
 
     def _update_font(self):
         self._label.configure(font=self._apply_font_scaling(self._font))
+
+    def _update_wraplength(self, event=None):
+        if self._wraplength == "auto":
+            self._label.configure(wraplength=self._label.winfo_width())
+        else:
+            self._label.configure(
+                wraplength=self._apply_widget_scaling(self._wraplength)
+            )
 
     def destroy(self):
         if isinstance(self._font, CTkFont):
@@ -132,10 +142,11 @@ class CTkSimpleLabel(CTkBaseClass):
             self._label.configure(anchor=self._anchor)
 
         if "wraplength" in kwargs:
-            self._wraplength = kwargs.pop("wraplength")
-            self._label.configure(
-                wraplength=self._apply_widget_scaling(self._wraplength)
-            )
+            wl = kwargs.pop("wraplength")
+            if wl != "auto" and not isinstance(wl, int):
+                raise ValueError("wraplength must be 'auto' or an integer")
+            self._wraplength = wl
+            self._update_wraplength()
 
         self._label.configure(
             **pop_from_dict_by_set(kwargs, self._valid_tk_label_attributes)
