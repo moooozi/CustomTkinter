@@ -1,4 +1,5 @@
 from typing import Union, Tuple, List, Optional, Any
+import tkinter
 
 from .core_rendering import CTkCanvas
 from .theme import ThemeManager
@@ -146,6 +147,9 @@ class CTkFrame(CTkBaseClass):
 
     def _draw(self, no_color_updates=False):
         super()._draw(no_color_updates)
+
+        if no_color_updates is False:
+            tkinter.Frame.configure(self, bg=self._apply_appearance_mode(self._bg_color))
 
         if self._canvas is None:
             return
