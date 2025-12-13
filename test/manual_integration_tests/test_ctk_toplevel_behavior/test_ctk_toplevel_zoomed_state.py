@@ -1,11 +1,11 @@
-import customtkinter
+import vgkit as vgk
 
-customtkinter.set_appearance_mode("dark")
+vgk.set_appearance_mode("dark")
 
-app = customtkinter.CTk()
+app = vgk.Window()
 app.geometry("400x400+300+300")
 
-toplevel = customtkinter.CTkToplevel(app)
+toplevel = vgk.Toplevel(app)
 toplevel.geometry("350x240+800+300")
 
 
@@ -23,7 +23,10 @@ def change_appearance_mode():
     app.after(8000, lambda: toplevel.state("normal"))
 
 
-button_1 = customtkinter.CTkButton(app, text="start test", command=change_appearance_mode)
+button_1 = vgk.Button(app, text="start test", command=change_appearance_mode)
 button_1.pack(pady=20, padx=20)
 
 app.mainloop()
+
+
+

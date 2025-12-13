@@ -1,9 +1,12 @@
-import customtkinter
+import vgkit as vgk
 
-app = customtkinter.CTk()
+app = vgk.Window()
 app.geometry("400x240")
 
 app.withdraw()
 app.after(2000, app.deiconify)
 
 app.mainloop()
+
+
+

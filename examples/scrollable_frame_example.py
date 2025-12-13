@@ -1,9 +1,9 @@
-import customtkinter
+import vgkit
 import os
 from PIL import Image
 
 
-class ScrollableCheckBoxFrame(customtkinter.CTkScrollableFrame):
+class ScrollableCheckBoxFrame(vgkit.ScrollableFrame):
     def __init__(self, master, item_list, command=None, **kwargs):
         super().__init__(master, **kwargs)
 
@@ -13,7 +13,7 @@ class ScrollableCheckBoxFrame(customtkinter.CTkScrollableFrame):
             self.add_item(item)
 
     def add_item(self, item):
-        checkbox = customtkinter.CTkCheckBox(self, text=item)
+        checkbox = vgkit.CheckBox(self, text=item)
         if self.command is not None:
             checkbox.configure(command=self.command)
         checkbox.grid(row=len(self.checkbox_list), column=0, pady=(0, 10))
@@ -27,21 +27,27 @@ class ScrollableCheckBoxFrame(customtkinter.CTkScrollableFrame):
                 return
 
     def get_checked_items(self):
-        return [checkbox.cget("text") for checkbox in self.checkbox_list if checkbox.get() == 1]
+        return [
+            checkbox.cget("text")
+            for checkbox in self.checkbox_list
+            if checkbox.get() == 1
+        ]
 
 
-class ScrollableRadiobuttonFrame(customtkinter.CTkScrollableFrame):
+class ScrollableRadiobuttonFrame(vgkit.ScrollableFrame):
     def __init__(self, master, item_list, command=None, **kwargs):
         super().__init__(master, **kwargs)
 
         self.command = command
-        self.radiobutton_variable = customtkinter.StringVar()
+        self.radiobutton_variable = vgkit.StringVar()
         self.radiobutton_list = []
         for i, item in enumerate(item_list):
             self.add_item(item)
 
     def add_item(self, item):
-        radiobutton = customtkinter.CTkRadioButton(self, text=item, value=item, variable=self.radiobutton_variable)
+        radiobutton = vgkit.RadioButton(
+            self, text=item, value=item, variable=self.radiobutton_variable
+        )
         if self.command is not None:
             radiobutton.configure(command=self.command)
         radiobutton.grid(row=len(self.radiobutton_list), column=0, pady=(0, 10))
@@ -58,19 +64,21 @@ class ScrollableRadiobuttonFrame(customtkinter.CTkScrollableFrame):
         return self.radiobutton_variable.get()
 
 
-class ScrollableLabelButtonFrame(customtkinter.CTkScrollableFrame):
+class ScrollableLabelButtonFrame(vgkit.ScrollableFrame):
     def __init__(self, master, command=None, **kwargs):
         super().__init__(master, **kwargs)
         self.grid_columnconfigure(0, weight=1)
 
         self.command = command
-        self.radiobutton_variable = customtkinter.StringVar()
+        self.radiobutton_variable = vgkit.StringVar()
         self.label_list = []
         self.button_list = []
 
     def add_item(self, item, image=None):
-        label = customtkinter.CTkLabel(self, text=item, image=image, compound="left", padx=5, anchor="w")
-        button = customtkinter.CTkButton(self, text="Command", width=100, height=24)
+        label = vgkit.Label(
+            self, text=item, image=image, compound="left", padx=5, anchor="w"
+        )
+        button = vgkit.Button(self, text="Command", width=100, height=24)
         if self.command is not None:
             button.configure(command=lambda: self.command(item))
         label.grid(row=len(self.label_list), column=0, pady=(0, 10), sticky="w")
@@ -88,7 +96,7 @@ class ScrollableLabelButtonFrame(customtkinter.CTkScrollableFrame):
                 return
 
 
-class App(customtkinter.CTk):
+class App(vgkit.Window):
     def __init__(self):
         super().__init__()
 
@@ -97,37 +105,67 @@ class App(customtkinter.CTk):
         self.columnconfigure(2, weight=1)
 
         # create scrollable checkbox frame
-        self.scrollable_checkbox_frame = ScrollableCheckBoxFrame(master=self, width=200, command=self.checkbox_frame_event,
-                                                                 item_list=[f"item {i}" for i in range(50)])
-        self.scrollable_checkbox_frame.grid(row=0, column=0, padx=15, pady=15, sticky="ns")
+        self.scrollable_checkbox_frame = ScrollableCheckBoxFrame(
+            master=self,
+            width=200,
+            command=self.checkbox_frame_event,
+            item_list=[f"item {i}" for i in range(50)],
+        )
+        self.scrollable_checkbox_frame.grid(
+            row=0, column=0, padx=15, pady=15, sticky="ns"
+        )
         self.scrollable_checkbox_frame.add_item("new item")
 
         # create scrollable radiobutton frame
-        self.scrollable_radiobutton_frame = ScrollableRadiobuttonFrame(master=self, width=500, command=self.radiobutton_frame_event,
-                                                                       item_list=[f"item {i}" for i in range(100)],
-                                                                       label_text="ScrollableRadiobuttonFrame")
-        self.scrollable_radiobutton_frame.grid(row=0, column=1, padx=15, pady=15, sticky="ns")
+        self.scrollable_radiobutton_frame = ScrollableRadiobuttonFrame(
+            master=self,
+            width=500,
+            command=self.radiobutton_frame_event,
+            item_list=[f"item {i}" for i in range(100)],
+            label_text="ScrollableRadiobuttonFrame",
+        )
+        self.scrollable_radiobutton_frame.grid(
+            row=0, column=1, padx=15, pady=15, sticky="ns"
+        )
         self.scrollable_radiobutton_frame.configure(width=200)
         self.scrollable_radiobutton_frame.remove_item("item 3")
 
         # create scrollable label and button frame
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        self.scrollable_label_button_frame = ScrollableLabelButtonFrame(master=self, width=300, command=self.label_button_frame_event, corner_radius=0)
-        self.scrollable_label_button_frame.grid(row=0, column=2, padx=0, pady=0, sticky="nsew")
+        self.scrollable_label_button_frame = ScrollableLabelButtonFrame(
+            master=self,
+            width=300,
+            command=self.label_button_frame_event,
+            corner_radius=0,
+        )
+        self.scrollable_label_button_frame.grid(
+            row=0, column=2, padx=0, pady=0, sticky="nsew"
+        )
         for i in range(20):  # add items with images
-            self.scrollable_label_button_frame.add_item(f"image and item {i}", image=customtkinter.CTkImage(Image.open(os.path.join(current_dir, "test_images", "chat_light.png"))))
+            self.scrollable_label_button_frame.add_item(
+                f"image and item {i}",
+                image=vgkit.CTkImage(
+                    Image.open(
+                        os.path.join(current_dir, "test_images", "chat_light.png")
+                    )
+                ),
+            )
 
     def checkbox_frame_event(self):
-        print(f"checkbox frame modified: {self.scrollable_checkbox_frame.get_checked_items()}")
+        print(
+            f"checkbox frame modified: {self.scrollable_checkbox_frame.get_checked_items()}"
+        )
 
     def radiobutton_frame_event(self):
-        print(f"radiobutton frame modified: {self.scrollable_radiobutton_frame.get_checked_item()}")
+        print(
+            f"radiobutton frame modified: {self.scrollable_radiobutton_frame.get_checked_item()}"
+        )
 
     def label_button_frame_event(self, item):
         print(f"label button frame clicked: {item}")
 
 
 if __name__ == "__main__":
-    customtkinter.set_appearance_mode("dark")
+    vgkit.set_appearance_mode("dark")
     app = App()
     app.mainloop()

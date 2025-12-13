@@ -1,0 +1,38 @@
+import sys
+
+from .ctk_font import CTkFont
+from .font_manager import FontManager
+
+# import DrawEngine to set preferred_drawing_method if loading shapes font fails
+from ..core_rendering import DrawEngine
+from pathlib import Path
+
+FontManager.init_font_manager()
+
+# load Roboto fonts (used on Windows/Linux)
+vgkit_directory = Path(__file__).parent.parent.parent.parent
+
+# Debug: Ensure fonts exist before loading
+FontManager.load_font(
+    str(vgkit_directory / "assets" / "fonts" / "Roboto" / "Roboto-Regular.ttf")
+)
+
+FontManager.load_font(
+    str(vgkit_directory / "assets" / "fonts" / "Roboto" / "Roboto-Medium.ttf")
+)
+
+# load font necessary for rendering the widgets (used on Windows/Linux)
+if (
+    FontManager.load_font(
+        str(vgkit_directory / "assets" / "fonts" / "CustomTkinter_shapes_font.otf")
+    )
+    is False
+):
+    # change draw method if font loading failed
+    if DrawEngine.preferred_drawing_method == "font_shapes":
+        sys.stderr.write(
+            "vgkit.windows.widgets.font warning: "
+            + "Preferred drawing method 'font_shapes' can not be used because the font file could not be loaded.\n"
+            + "Using 'circle_shapes' instead. The rendering quality will be bad!\n"
+        )
+        DrawEngine.preferred_drawing_method = "circle_shapes"

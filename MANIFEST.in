@@ -1,5 +1,9 @@
-include customtkinter/assets/*
-include customtkinter/assets/fonts/*
-include customtkinter/assets/fonts/Roboto/*
-include customtkinter/assets/icons/*
-include customtkinter/assets/themes/*
+include vgkit/assets/*
+include vgkit/assets/fonts/*
+include vgkit/assets/fonts/Roboto/*
+include vgkit/assets/icons/*
+include vgkit/assets/themes/*
+include vgkit/py.typed
+
+
+

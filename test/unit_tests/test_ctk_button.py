@@ -1,11 +1,10 @@
-import time
-import customtkinter
+import vgkit as vgk
 
 
-class TestCTkButton():
+class TestCTkButton:
     def __init__(self):
-        self.root_ctk = customtkinter.CTk()
-        self.ctk_button = customtkinter.CTkButton(self.root_ctk)
+        self.root_ctk = vgk.Window()
+        self.ctk_button = vgk.Button(self.root_ctk)
         self.ctk_button.pack(padx=20, pady=20)
         self.root_ctk.title(self.__class__.__name__)
 

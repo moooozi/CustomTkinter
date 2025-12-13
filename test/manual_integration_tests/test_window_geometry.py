@@ -1,9 +1,9 @@
-import customtkinter
+import vgkit as vgk
 
-customtkinter.set_window_scaling(1.3)
+vgk.set_window_scaling(1.3)
 
-app = customtkinter.CTk()
-toplevel = customtkinter.CTkToplevel(app)
+app = vgk.Window()
+toplevel = vgk.Toplevel(app)
 
 
 app.after(1000, lambda: app.geometry("300x300"))
